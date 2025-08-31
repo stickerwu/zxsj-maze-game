@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  zxsj-maze-game:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: zxsj-maze-game:latest
+    container_name: zxsj-maze-game-container
+    ports:
+      - "9898:9898"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9898"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - zxsj-maze-network
+
+networks:
+  zxsj-maze-network:
+    driver: bridge
+
+# 使用方法：
+# 1. 构建并启动：docker-compose up -d --build
+# 2. 停止服务：docker-compose down
+# 3. 查看日志：docker-compose logs -f
+# 4. 重启服务：docker-compose restart
