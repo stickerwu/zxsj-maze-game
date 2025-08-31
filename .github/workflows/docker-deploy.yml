@@ -1,0 +1,147 @@
+name: Docker Build and Deploy
+
+# 触发条件：推送到main分支或创建tag时触发
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, master ]
+
+# 环境变量
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: zxsj-maze-game
+
+jobs:
+  # 代码质量检查和构建测试
+  test:
+    runs-on: ubuntu-latest
+    name: 🧪 Test and Build
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 📦 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: 📋 Install dependencies
+      run: npm ci
+      
+    - name: 🔍 Run ESLint
+      run: npm run lint
+      continue-on-error: true
+      
+    - name: 🏗️ Build project
+      run: npm run build
+      
+    - name: 📤 Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-files
+        path: dist/
+        retention-days: 1
+
+  # Docker镜像构建和推送
+  docker:
+    runs-on: ubuntu-latest
+    needs: test
+    name: 🐳 Docker Build & Push
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 📤 Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: build-files
+        path: dist/
+        
+    - name: 🔧 Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: 🔑 Login to Docker Hub
+      if: github.event_name != 'pull_request'
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ secrets.DOCKER_HUB_USERNAME }}
+        password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+        
+    - name: 🏷️ Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=raw,value=latest,enable={{is_default_branch}}
+          
+    - name: 🐳 Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
+        push: ${{ github.event_name != 'pull_request' }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        
+    - name: 🔍 Image digest
+      if: github.event_name != 'pull_request'
+      run: echo ${{ steps.docker_build.outputs.digest }}
+
+  # 部署通知
+  notify:
+    runs-on: ubuntu-latest
+    needs: [test, docker]
+    name: 📢 Deployment Notification
+    if: always()
+    
+    steps:
+    - name: 📊 Check job status
+      run: |
+        echo "Test job status: ${{ needs.test.result }}"
+        echo "Docker job status: ${{ needs.docker.result }}"
+        
+        if [[ "${{ needs.test.result }}" == "success" && "${{ needs.docker.result }}" == "success" ]]; then
+          echo "✅ 部署成功！Docker镜像已推送到Docker Hub"
+          echo "🚀 镜像地址: docker.io/${{ secrets.DOCKER_HUB_USERNAME }}/zxsj-maze-game:latest"
+          echo "🎮 运行命令: docker run -d -p 9898:9898 ${{ secrets.DOCKER_HUB_USERNAME }}/zxsj-maze-game:latest"
+        else
+          echo "❌ 部署失败，请检查构建日志"
+          exit 1
+        fi
+        
+    - name: 📝 Create deployment summary
+      if: success()
+      run: |
+        echo "## 🎉 部署成功报告" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📦 构建信息" >> $GITHUB_STEP_SUMMARY
+        echo "- **项目名称**: 噩梦潜渊古龙陵萧行云P2内场模拟器" >> $GITHUB_STEP_SUMMARY
+        echo "- **构建时间**: $(date)" >> $GITHUB_STEP_SUMMARY
+        echo "- **Git提交**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **分支**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🐳 Docker镜像" >> $GITHUB_STEP_SUMMARY
+        echo "- **镜像地址**: \`docker.io/${{ secrets.DOCKER_HUB_USERNAME }}/zxsj-maze-game:latest\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **运行命令**: \`docker run -d -p 9898:9898 ${{ secrets.DOCKER_HUB_USERNAME }}/zxsj-maze-game:latest\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **访问地址**: http://localhost:9898" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🎮 游戏特性" >> $GITHUB_STEP_SUMMARY
+        echo "- 🎯 沉浸式3D迷宫体验" >> $GITHUB_STEP_SUMMARY
+        echo "- 🎮 WASD移动 + 鼠标视角控制" >> $GITHUB_STEP_SUMMARY
+        echo "- 🗺️ 实时小地图导航" >> $GITHUB_STEP_SUMMARY
+        echo "- ⚡ 迷宫编辑器" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**🚀 部署完成，开始你的迷宫冒险之旅吧！**" >> $GITHUB_STEP_SUMMARY

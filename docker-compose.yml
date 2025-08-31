@@ -2,26 +2,32 @@ version: '3.8'
 
 services:
   zxsj-maze-game:
-    build:
+    build: 
       context: .
       dockerfile: Dockerfile
-    image: zxsj-maze-game:latest
-    container_name: zxsj-maze-game-container
+    image: ${DOCKER_USERNAME:-local}/zxsj-maze-game:${TAG:-latest}
+    container_name: zxsj-maze-game
     ports:
-      - "9898:9898"
+      - "${DOCKER_PORT:-9898}:9898"
     restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+    labels:
+      - "com.docker.compose.project=zxsj-maze-game"
+      - "description=噩梦潜渊古龙陵萧行云P2内场模拟器"
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9898"]
+      test: ["CMD", "curl", "-f", "http://localhost:9898"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
     networks:
-      - zxsj-maze-network
+      - maze-network
 
 networks:
-  zxsj-maze-network:
+  maze-network:
     driver: bridge
+    name: zxsj-maze-network
 
 # 使用方法：
 # 1. 构建并启动：docker-compose up -d --build
